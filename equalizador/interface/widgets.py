@@ -7,6 +7,8 @@ import math
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QSlider, QVBoxLayout, QWidget
 
+from .ajuda import BotaoInfo
+
 PASSOS = 10000  # resolução interna do QSlider (que só trabalha com inteiros)
 
 
@@ -20,7 +22,7 @@ class SliderRotulado(QWidget):
     valorMudou = Signal(float)
 
     def __init__(self, titulo: str, minimo: float, maximo: float, inicial: float,
-                 unidade: str = "", log: bool = False, casas: int = 0, dica: str = ""):
+                 unidade: str = "", log: bool = False, casas: int = 0, info: str | None = None):
         super().__init__()
         self.minimo, self.maximo, self.log = minimo, maximo, log
         self.unidade, self.casas = unidade, casas
@@ -35,6 +37,9 @@ class SliderRotulado(QWidget):
         topo = QHBoxLayout()
         topo.setContentsMargins(0, 0, 0, 0)
         topo.addWidget(self._titulo)
+        if info:
+            topo.addSpacing(4)
+            topo.addWidget(BotaoInfo(info))
         topo.addStretch()
         topo.addWidget(self._valor)
         coluna = QVBoxLayout(self)
@@ -43,8 +48,6 @@ class SliderRotulado(QWidget):
         coluna.addLayout(topo)
         coluna.addWidget(self._slider)
 
-        if dica:
-            self.setToolTip(dica)
         self._slider.valueChanged.connect(self._ao_mover)
         self.definir(inicial)
 

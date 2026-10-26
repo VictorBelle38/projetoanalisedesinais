@@ -18,6 +18,9 @@ espectrograma e resposta teórica dos filtros).
 | Filtragem seletiva | **Notch** com f0 e Q ajustáveis; **passa-baixas** Butterworth com corte ajustável |
 | Visualização dupla | Osciloscópio com *trigger* + espectro **FFT** (janela de Hann) + **espectrograma** + curva **\|H(f)\|** teórica, a ~30 FPS |
 | Interface interativa | Sliders (escala logarítmica para frequência), bypass A/B, medidores de pico, escolha de dispositivos de áudio |
+| Ícones ⓘ didáticos | Em cada controle e gráfico: passe o mouse para um resumo ou clique para ver "o que é", "o que faz com o áudio" e um "experimente" |
+
+![Janela de explicação do ícone ⓘ](docs/ajuda_notch.png)
 
 ## Como rodar
 
@@ -74,6 +77,7 @@ equalizador/
 ├── sinais_teste.py         ruído branco, chirp, acorde + apito, zumbido 60 Hz
 └── interface/
     ├── janela.py           janela principal (PySide6 + PyQtGraph)
+    ├── ajuda.py            textos e botão dos ícones ⓘ explicativos
     └── widgets.py          slider com rótulo e escala logarítmica
 tests/test_dsp.py           testes automáticos
 docs/teoria.md              fundamentação teórica (com fórmulas)

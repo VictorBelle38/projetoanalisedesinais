@@ -31,6 +31,7 @@ from ..analise import AnalisadorEspectral, indice_gatilho
 from ..audio_io import MotorAudio, carregar_arquivo, listar_dispositivos
 from ..filtros import TipoFiltro
 from ..processador import ParametrosEQ
+from .ajuda import BotaoInfo
 from .widgets import SliderRotulado
 
 pg.setConfigOptions(antialias=True, imageAxisOrder="row-major")
@@ -53,6 +54,16 @@ def _rotulos_log(eixo: pg.AxisItem, f_max: float) -> None:
     """Rótulos em Hz para um eixo cujos valores estão em log10(f)."""
     marcas = [f for f in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000) if f <= f_max]
     eixo.setTicks([[(np.log10(f), f"{f // 1000}k" if f >= 1000 else str(f)) for f in marcas]])
+
+
+def _com_info(widget: QWidget, chave: str) -> QWidget:
+    """Coloca um ícone ⓘ ao lado de um controle."""
+    caixa = QWidget()
+    linha = QHBoxLayout(caixa)
+    linha.setContentsMargins(0, 0, 0, 0)
+    linha.addWidget(widget, stretch=1)
+    linha.addWidget(BotaoInfo(chave), alignment=Qt.AlignTop)
+    return caixa
 
 
 class JanelaPrincipal(QMainWindow):
@@ -108,7 +119,7 @@ class JanelaPrincipal(QMainWindow):
         self.cmb_fonte.addItems([FONTE_MIC, FONTE_ARQ, *[f"🔊 Teste: {n}" for n in sinais_teste.SINAIS]])
         self.cmb_fonte.setCurrentIndex(2)  # começa com ruído branco: funciona em qualquer PC
         self.cmb_fonte.currentIndexChanged.connect(self._ao_trocar_fonte)
-        form.addRow(self.cmb_fonte)
+        form.addRow(_com_info(self.cmb_fonte, "fonte"))
 
         self.btn_abrir = QPushButton("Abrir arquivo…")
         self.btn_abrir.clicked.connect(self._abrir_arquivo)
@@ -123,8 +134,8 @@ class JanelaPrincipal(QMainWindow):
             cmb.addItem("Padrão do sistema", None)
             for idx, nome in lista:
                 cmb.addItem(nome, idx)
-            cmb.setMaximumWidth(230)
-        form.addRow("Entrada:", self.cmb_entrada)
+            cmb.setMaximumWidth(210)
+        form.addRow("Entrada:", _com_info(self.cmb_entrada, "dispositivos"))
         form.addRow("Saída:", self.cmb_saida)
 
         self.btn_play = QPushButton("▶  Iniciar  (Espaço)")
@@ -134,7 +145,7 @@ class JanelaPrincipal(QMainWindow):
 
         self.lbl_status = QLabel("Parado.")
         self.lbl_status.setWordWrap(True)
-        form.addRow(self.lbl_status)
+        form.addRow(_com_info(self.lbl_status, "status"))
         self._ao_trocar_fonte()
         return g
 
@@ -147,22 +158,19 @@ class JanelaPrincipal(QMainWindow):
         self.cmb_tipo = QComboBox()
         for t in TipoFiltro:
             self.cmb_tipo.addItem(t.value, t)
-        self.cmb_tipo.setToolTip(
-            "Butterworth: banda passante plana.\n"
-            "Chebyshev I: transição mais íngreme, com ondulação (ripple) de 1 dB.\n"
-            "FIR: fase linear (sem distorção de fase) e bandas que somam exatamente 1.")
         self.cmb_tipo.currentIndexChanged.connect(self._ao_trocar_tipo)
         self.spn_ordem = QSpinBox(minimum=1, maximum=8, value=p.ordem, prefix="ordem ")
-        self.spn_ordem.setToolTip("Ordem do filtro IIR: cada +1 de ordem ≈ +20 dB/década de inclinação.")
         self.spn_ordem.valueChanged.connect(lambda v: self._mudar(ordem=v))
         linha.addWidget(self.cmb_tipo, stretch=1)
+        linha.addWidget(BotaoInfo("tipo_filtro"))
         linha.addWidget(self.spn_ordem)
+        linha.addWidget(BotaoInfo("ordem"))
         col.addLayout(linha)
 
         self.sld_f1 = SliderRotulado("Cruzamento graves | médios", 40, 1000, p.f1_hz, "Hz", log=True,
-                                     dica="Frequência que separa a banda de graves da de médios.")
+                                     info="cruzamentos")
         self.sld_f2 = SliderRotulado("Cruzamento médios | agudos", 1000, 12000, p.f2_hz, "Hz", log=True,
-                                     dica="Frequência que separa a banda de médios da de agudos.")
+                                     info="cruzamentos")
         self.sld_f1.valorMudou.connect(lambda v: self._mudar(f1_hz=v))
         self.sld_f2.valorMudou.connect(lambda v: self._mudar(f2_hz=v))
         col.addWidget(self.sld_f1)
@@ -170,8 +178,7 @@ class JanelaPrincipal(QMainWindow):
 
         self.sld_ganhos = {}
         for chave, nome in (("graves", "🔴 Ganho GRAVES"), ("medios", "🟢 Ganho MÉDIOS"), ("agudos", "🟣 Ganho AGUDOS")):
-            s = SliderRotulado(nome, -24, 12, 0, "dB", casas=1,
-                               dica="Ganho da banda em decibéis: +6 dB ≈ dobra a amplitude; −6 dB ≈ metade.")
+            s = SliderRotulado(nome, -24, 12, 0, "dB", casas=1, info=chave)
             s.valorMudou.connect(lambda v, c=chave: self._mudar(**{f"ganho_{c}_db": v}))
             self.sld_ganhos[chave] = s
             col.addWidget(s)
@@ -183,36 +190,35 @@ class JanelaPrincipal(QMainWindow):
         p = ParametrosEQ()
 
         self.chk_notch = QCheckBox("Filtro notch (elimina uma frequência)")
-        self.chk_notch.setToolTip("Zeros sobre o círculo unitário em f0: remove apitos e o zumbido de 60 Hz.")
         self.chk_notch.toggled.connect(lambda v: self._mudar(notch_ativo=v))
-        self.sld_notch_f = SliderRotulado("Frequência central f0", 20, 10000, p.notch_f0_hz, "Hz", log=True)
+        self.sld_notch_f = SliderRotulado("Frequência central f0", 20, 10000, p.notch_f0_hz, "Hz", log=True,
+                                          info="notch_f0")
         self.sld_notch_q = SliderRotulado("Fator de qualidade Q", 1, 100, p.notch_q, "", log=True, casas=1,
-                                          dica="Q = f0 / largura de banda. Q alto = entalhe mais estreito.")
+                                          info="notch_q")
         self.sld_notch_f.valorMudou.connect(lambda v: self._mudar(notch_f0_hz=v))
         self.sld_notch_q.valorMudou.connect(lambda v: self._mudar(notch_q=v))
-        for w in (self.chk_notch, self.sld_notch_f, self.sld_notch_q):
+        for w in (_com_info(self.chk_notch, "notch"), self.sld_notch_f, self.sld_notch_q):
             col.addWidget(w)
 
         self.chk_pb = QCheckBox("Passa-baixas (Butterworth 4ª ordem)")
-        self.chk_pb.setToolTip("Deixa passar só o que está abaixo da frequência de corte (−3 dB no corte).")
         self.chk_pb.toggled.connect(lambda v: self._mudar(pb_ativo=v))
-        self.sld_pb = SliderRotulado("Frequência de corte", 200, 20000, p.pb_corte_hz, "Hz", log=True)
+        self.sld_pb = SliderRotulado("Frequência de corte", 200, 20000, p.pb_corte_hz, "Hz", log=True,
+                                     info="pb_corte")
         self.sld_pb.valorMudou.connect(lambda v: self._mudar(pb_corte_hz=v))
-        col.addWidget(self.chk_pb)
+        col.addWidget(_com_info(self.chk_pb, "passa_baixas"))
         col.addWidget(self.sld_pb)
         return g
 
     def _grupo_saida(self) -> QGroupBox:
         g = QGroupBox("4. Saída")
         col = QVBoxLayout(g)
-        self.sld_saida = SliderRotulado("Volume de saída", -24, 12, 0, "dB", casas=1)
+        self.sld_saida = SliderRotulado("Volume de saída", -24, 12, 0, "dB", casas=1, info="volume")
         self.sld_saida.valorMudou.connect(lambda v: self._mudar(ganho_saida_db=v))
         col.addWidget(self.sld_saida)
 
-        self.chk_bypass = QCheckBox("Bypass — ouvir o sinal ORIGINAL  (tecla B)")
-        self.chk_bypass.setToolTip("Comparação A/B: desliga todo o processamento.")
+        self.chk_bypass = QCheckBox("Bypass — ouvir o ORIGINAL  (tecla B)")
         self.chk_bypass.toggled.connect(lambda v: self._mudar(bypass=v))
-        col.addWidget(self.chk_bypass)
+        col.addWidget(_com_info(self.chk_bypass, "bypass"))
 
         grade = QGridLayout()
         self.bar_entrada, self.bar_saida = QProgressBar(), QProgressBar()
@@ -222,6 +228,7 @@ class JanelaPrincipal(QMainWindow):
             bar.setFormat("%v dBFS")
             grade.addWidget(QLabel(nome), i, 0)
             grade.addWidget(bar, i, 1)
+        grade.addWidget(BotaoInfo("medidores"), 0, 2)
         col.addLayout(grade)
 
         btn = QPushButton("Restaurar padrões")
@@ -231,11 +238,35 @@ class JanelaPrincipal(QMainWindow):
 
     # ============================================================ gráficos
 
+    def _painel_grafico(self, titulo: str, chave_info: str) -> tuple[QWidget, pg.PlotItem]:
+        """Gráfico com cabeçalho próprio: título + ícone ⓘ."""
+        painel = QWidget()
+        painel.setStyleSheet("background: black;")
+        col = QVBoxLayout(painel)
+        col.setContentsMargins(4, 4, 4, 0)
+        col.setSpacing(0)
+        cabecalho = QHBoxLayout()
+        rotulo = QLabel(titulo)
+        rotulo.setStyleSheet("color: #ddd; font-size: 13px;")
+        cabecalho.addStretch()
+        cabecalho.addWidget(rotulo)
+        cabecalho.addSpacing(6)
+        cabecalho.addWidget(BotaoInfo(chave_info))
+        cabecalho.addStretch()
+        col.addLayout(cabecalho)
+        widget = pg.PlotWidget()
+        col.addWidget(widget, stretch=1)
+        return painel, widget.getPlotItem()
+
     def _montar_graficos(self) -> QWidget:
-        area = pg.GraphicsLayoutWidget()
+        area = QWidget()
+        grade = QGridLayout(area)
+        grade.setContentsMargins(0, 0, 0, 0)
+        grade.setSpacing(2)
 
         # --- Osciloscópio
-        self.pl_osc = area.addPlot(row=0, col=0, title="Osciloscópio — forma de onda no tempo")
+        painel, self.pl_osc = self._painel_grafico("Osciloscópio — forma de onda no tempo", "osciloscopio")
+        grade.addWidget(painel, 0, 0)
         self.pl_osc.setLabel("bottom", "tempo", units="ms")
         self.pl_osc.setLabel("left", "amplitude")
         self.pl_osc.setYRange(-1, 1)
@@ -245,7 +276,8 @@ class JanelaPrincipal(QMainWindow):
         self.cv_osc_out = self.pl_osc.plot(pen=pg.mkPen(COR_SAIDA, width=2), name="saída")
 
         # --- Espectro (FFT)
-        self.pl_fft = area.addPlot(row=0, col=1, title="Espectro de magnitude — FFT (janela de Hann)")
+        painel, self.pl_fft = self._painel_grafico("Espectro de magnitude — FFT (janela de Hann)", "fft")
+        grade.addWidget(painel, 0, 1)
         self.pl_fft.setLogMode(x=True)
         self.pl_fft.setLabel("bottom", "frequência (Hz)")
         self.pl_fft.setLabel("left", "magnitude", units="dBFS")
@@ -256,7 +288,8 @@ class JanelaPrincipal(QMainWindow):
         self.cv_fft_out = self.pl_fft.plot(pen=pg.mkPen(COR_SAIDA, width=2), name="saída")
 
         # --- Espectrograma
-        self.pl_espec = area.addPlot(row=1, col=0, title="Espectrograma da saída (STFT)")
+        painel, self.pl_espec = self._painel_grafico("Espectrograma da saída (STFT)", "espectrograma")
+        grade.addWidget(painel, 1, 0)
         self.pl_espec.setLabel("bottom", "tempo", units="s")
         self.pl_espec.setLabel("left", "frequência (Hz)")
         self.img_espec = pg.ImageItem()
@@ -267,7 +300,8 @@ class JanelaPrincipal(QMainWindow):
         barra.setImageItem(self.img_espec, insert_in=self.pl_espec)
 
         # --- Resposta em frequência teórica
-        self.pl_resp = area.addPlot(row=1, col=1, title="Resposta dos filtros |H(f)| — teórica")
+        painel, self.pl_resp = self._painel_grafico("Resposta dos filtros |H(f)| — teórica", "resposta")
+        grade.addWidget(painel, 1, 1)
         self.pl_resp.setLogMode(x=True)
         self.pl_resp.setLabel("bottom", "frequência (Hz)")
         self.pl_resp.setLabel("left", "ganho", units="dB")
